@@ -40,6 +40,8 @@
 #include "bugger/interfaces/ScipInterface.hpp"
 #elif defined(BUGGER_WITH_SOPLEX)
 #include "bugger/interfaces/SoplexInterface.hpp"
+#elif defined(BUGGER_WITH_HIGHS)
+#include "bugger/interfaces/HighsInterface.hpp"
 #endif
 
 typedef
