@@ -31,12 +31,14 @@ public:
 
     HighsModel model;
 
-    model.lp_.num_col_ = ncols;
-    model.lp_.num_row_ = nrows;
     model.lp_.sense_ = obj.sense ? ObjSense::kMinimize : ObjSense::kMaximize;
     model.lp_.offset_ = obj.offset;
 
-    this->vars.resize(ncols);
+    std::vector<HighsVarType> integrality;
+    std::vector<double> col_lower, col_upper, row_lower, row_upper;
+    col_lower.reserve(ncols);
+    col_upper.reserve(ncols);
+
     if (solution_exists) {
       this->value = this->model->getPrimalObjective(solution);
     } else if (this->reference->status == SolutionStatus::kUnbounded) {
@@ -45,62 +47,59 @@ public:
       this->value = obj.sense ? kHighsInf : -kHighsInf;
     }
 
-    // Copy the matrix across (TODO: is it really a copy?)
-    model.lp_.a_matrix_.format_ = MatrixFormat::kRowwisePartitioned;
-    auto extract_start = [](IndexRange r) -> int { return r.start; };
-    auto extract_end = [](IndexRange r) -> int { return r.end; };
-    const int nMatrixRows =
-        consMatrix.getRowRangesVec().size(); // TODO: probably don't need this
-    const std::vector<IndexRange> &rowRanges = consMatrix.getRowRangesVec();
-    model.lp_.a_matrix_.start_.reserve(nMatrixRows);
-    std::transform(rowRanges.begin(), rowRanges.end(),
-                   model.lp_.a_matrix_.start_.begin(), extract_start);
-    model.lp_.a_matrix_.p_end_.reserve(nMatrixRows);
-    std::transform(rowRanges.begin(), rowRanges.end(),
-                   model.lp_.a_matrix_.p_end_.begin(), extract_end);
-    model.lp_.a_matrix_.index_ = consMatrix.getColumnsVec();
-    model.lp_.a_matrix_.value_ = consMatrix.getValuesVec();
-
-    // Copy the integrality across
-    model.lp_.integrality_.resize(model.lp_.num_col_);
-	  for (int col = 0; col < ncols; ++col) {
+    for (int col = 0; col < ncols; ++col) {
+      if (cflags[col].test(ColFlag::kFixed)) {
+        continue;
+      }
+      double lb = cflags[col].test(ColFlag::kLbInf) ? -kHighsInf : static_cast<double>(domains.lower_bounds[col]);
+      double ub = cflags[col].test(ColFlag::kLbInf) ? kHighsInf : static_cast<double>(domains.upper_bounds[col]);
+      assert(!cflags[col].test(ColFlag::kInactive) || lb == ub);
       HighsVarType type;
       if (cflags[col].test(ColFlag::kIntegral)) {
         type = HighsVarType::kInteger;
-      } else if (cflags[col].test(ColFlag::kImplInt)){
+      } else if (cflags[col].test(ColFlag::kImplInt)) {
         type = HighsVarType::kImplicitInteger;
       } else {
         type = HighsVarType::kContinuous;
       }
-      model.lp_.integrality_[col] = type;
-	  }
+      col_lower.push_back(lb);
+      col_upper.push_back(ub);
+      integrality.push_back(type);
+    }
+
+    model.lp_.num_col_ = integrality.size();
+    model.lp_.col_lower_ = col_lower;
+    model.lp_.col_upper_ = col_upper;
+    model.lp_.integrality_ = integrality;
+    model.lp_.a_matrix_.format_ = MatrixFormat::kColwise;
+
+    for (int row = 0; row < nrows; ++row){
+      if (rflags[row].test(RowFlag::kRedundant)) {
+        continue;
+      }
+      assert(!rflags[row].test(RowFlag::kLhsInf) || !rflags[row].test(RowFlag::kRhsInf));
+      const auto& rowvec = consMatrix.getRowCoefficients(row);
+      const auto& rowinds = rowvec.getIndices( );
+      const auto& rowvals = rowvec.getValues( );
+      int nrowcols = rowvec.getLength( );
+      HighsSparseMatrix sparse_row;
+      sparse_row.format_ = MatrixFormat::kRowwise;
+      sparse_row.num_col_ = nrowcols;
+      sparse_row.num_row_ = 1;
+      sparse_row.start_ = {0};
+      sparse_row.index_ = rowinds;
+      sparse_row.value_ = rowvals;
+
+      double lhs = rflags[row].test(RowFlag::kLhsInf) ? -kHighsInf : static_cast<double>(lhs_values[row]);
+      double rhs = rflags[row].test(RowFlag::kRhsInf) ? kHighsInf : static_cast<double>(rhs_values[row]);
+      for ( int col = 0; col < ncols; ++col) {
+        assert(!cflags[rowinds[i]].test(ColFlag::kFixed));
+        assert(rowvals[i] != 0);
+      }
+      model.lp_.a_matrix_.addRows(sparse_row);
+    }
 
     // TODO: column/row names?
-    // TODO: copy col and row bounds across
-
-    // Delete unnecessary columns and rows
-
-    HighsIndexCollection cols_to_delete, rows_to_delete;
-    cols_to_delete.is_set_ = true;
-    rows_to_delete.is_set_ = true;
-
-    for (int col = 0; col < ncols; ++col) {
-      if (cflags[col].test(ColFlag::kFixed)){
-        cols_to_delete.set_.push_back(col);
-      }
-    }
-
-    for (int row = 0; row < nrows; ++row) {
-      assert(!rflags[row].test(RowFlag::kLhsInf) || !rflags[row].test(RowFlag::kRhsInf));
-      if (rflags[row].test(RowFlag::kRedundant)) {
-        rows_to_delete.set_.push_back(row);
-      }
-    }
-
-    // Do rows first because it's already row-wise
-    model.lp_.deleteRows(rows_to_delete);
-    model.lp_.ensureColwise(); // deleteCols can't handle row-wise "yet"
-    model.lp_.deleteCols(cols_to_delete);
 
     // TODO: incomplete. See ScipRealInterface.hpp for what's missing.
 
