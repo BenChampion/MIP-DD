@@ -38,6 +38,8 @@ public:
     std::vector<double> col_lower, col_upper, row_lower, row_upper;
     col_lower.reserve(ncols);
     col_upper.reserve(ncols);
+    row_lower.reserve(nrows);
+    row_upper.reserve(nrows);
 
     if (solution_exists) {
       this->value = this->model->getPrimalObjective(solution);
@@ -96,8 +98,12 @@ public:
         assert(!cflags[rowinds[i]].test(ColFlag::kFixed));
         assert(rowvals[i] != 0);
       }
+      row_lower.push_back(lhs);
+      row_upper.push_back(rhs);
       model.lp_.a_matrix_.addRows(sparse_row);
     }
+
+    model.lp_.num_row_ = row_lower.size();
 
     // TODO: column/row names?
 
