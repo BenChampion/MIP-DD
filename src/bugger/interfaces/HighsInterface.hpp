@@ -31,15 +31,21 @@ public:
 
     HighsModel model;
 
+    model.lp_.model_name_ = this->model->getName();
+
     model.lp_.sense_ = obj.sense ? ObjSense::kMinimize : ObjSense::kMaximize;
     model.lp_.offset_ = obj.offset;
 
     std::vector<HighsVarType> integrality;
+    std::vector<std::string> col_name, row_name;
     std::vector<double> col_lower, col_upper, row_lower, row_upper;
     col_lower.reserve(ncols);
     col_upper.reserve(ncols);
+    col_name.reserve(ncols);
     row_lower.reserve(nrows);
     row_upper.reserve(nrows);
+    row_name.reserve(nrows);
+
 
     if (solution_exists) {
       this->value = this->model->getPrimalObjective(solution);
@@ -67,6 +73,7 @@ public:
       col_lower.push_back(lb);
       col_upper.push_back(ub);
       integrality.push_back(type);
+      col_name.push_back(varNames[col]);
     }
 
     model.lp_.num_col_ = integrality.size();
@@ -100,12 +107,13 @@ public:
       }
       row_lower.push_back(lhs);
       row_upper.push_back(rhs);
+      row_name.push_back(consNames[row]);
       model.lp_.a_matrix_.addRows(sparse_row);
     }
 
     model.lp_.num_row_ = row_lower.size();
-
-    // TODO: column/row names?
+    model.lp_.col_names_ = col_name;
+    model.lp_.row_names_ = row_name;
 
     // TODO: incomplete. See ScipRealInterface.hpp for what's missing.
 
