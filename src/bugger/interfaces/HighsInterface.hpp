@@ -11,6 +11,7 @@ template <typename REAL> class HighsInterface : public SolverInterface<REAL> {
 public:
   void doSetUp(SolverSettings &settings, const Problem<REAL> &problem,
                const Solution<REAL> &solution) override {
+    // TODO: incomplete. See ScipRealInterface.hpp for an indication of what's missing.
     this->adjustment = &settings;
     this->model = &problem;
     this->reference = &solution;
@@ -115,12 +116,56 @@ public:
     model.lp_.col_names_ = col_name;
     model.lp_.row_names_ = row_name;
 
-    // TODO: incomplete. See ScipRealInterface.hpp for what's missing.
-
-    highs.passModel(model);
+    highs.passModel(model); // TODO: handle errors here?
   }
   std::pair<char, SolverStatus> solve(const Vec<int> &passcodes) override {
-    return {0, SolverStatus::kUnknown};
+    // TODO: incomplete. See ScipRealInterface.hpp for an indication of what's missing.
+    SolverRetcode return_code = SolverRetcode::OKAY;
+    SolverStatus return_status = SolverStatus::kUnknown;
+    HighsStatus status;
+
+    status = highs.run();
+    if (status != HighsStatus::kOk) {
+      return_code = SolverRetcode::COMPLETIONFAIL;
+      return_status = SolverStatus::kUndefinedError;
+      return {return_code, return_status};
+    }
+
+    const HighsModelStatus& model_status = highs.getModelStatus();
+
+    switch (model_status) {
+      case HighsModelStatus::kUnknown:
+        return_status = SolverStatus::kUnknown;
+        break;
+      case HighsModelStatus::kInterrupt:
+        return_status = SolverStatus::kInterrupt;
+        break;
+      case HighsModelStatus::kTimeLimit:
+        return_status = SolverStatus::kTimeLimit;
+        break;
+      case HighsModelStatus::kMemoryLimit:
+        return_status = SolverStatus::kMemLimit;
+        break;
+      case HighsModelStatus::kSolutionLimit:
+        return_status = SolverStatus::kSolLimit;
+        break;
+      case HighsModelStatus::kOptimal:
+        return_status = SolverStatus::kOptimal;
+        break;
+      case HighsModelStatus::kInfeasible:
+        return_status = SolverStatus::kInfeasible;
+      case HighsModelStatus::kUnbounded:
+        return_status = SolverStatus::kUnbounded;
+        break;
+      case  HighsModelStatus::kUnboundedOrInfeasible:
+        return_status = SolverStatus::kInfeasibleOrUnbounded;
+        break;
+      default:
+        return_status = SolverStatus::kUndefinedError;
+        break;
+    }
+
+    return {return_code, return_status};
   }
 };
 
