@@ -9,6 +9,7 @@ template <typename REAL> class HighsInterface : public SolverInterface<REAL> {
 	Highs highs;
 
 public:
+  HighsInterface(const Message& msg) : SolverInterface<REAL>(msg) {}
   void doSetUp(SolverSettings &settings, const Problem<REAL> &problem,
                const Solution<REAL> &solution) override {
     // TODO: incomplete. See ScipRealInterface.hpp for an indication of what's missing.
@@ -28,7 +29,7 @@ public:
     const auto &cflags = this->model->getColFlags();
     const auto &rflags = this->model->getRowFlags();
 
-    this->set_parameters();
+    //this->set_parameters();
 
     HighsModel model;
 
@@ -89,9 +90,10 @@ public:
       }
       assert(!rflags[row].test(RowFlag::kLhsInf) || !rflags[row].test(RowFlag::kRhsInf));
       const auto& rowvec = consMatrix.getRowCoefficients(row);
-      const auto& rowinds = rowvec.getIndices( );
-      const auto& rowvals = rowvec.getValues( );
       int nrowcols = rowvec.getLength( );
+      const std::vector<int> rowinds(rowvec.getIndices( ), rowvec.getIndices( ) + nrowcols);
+      const std::vector<REAL> rowvals(rowvec.getValues( ), rowvec.getValues( ) + nrowcols);
+
       HighsSparseMatrix sparse_row;
       sparse_row.format_ = MatrixFormat::kRowwise;
       sparse_row.num_col_ = nrowcols;
@@ -174,8 +176,7 @@ public:
   void addParameters(ParameterSet &parameterset) override {}
   std::unique_ptr<SolverInterface<REAL>>
   create_solver(const Message &msg) override {
-    std::unique_ptr<SolverInterface<REAL>> highs;
-    return highs;
+    return std::unique_ptr<SolverInterface<REAL>>(new HighsInterface<REAL>(msg));
   }
 };
 
