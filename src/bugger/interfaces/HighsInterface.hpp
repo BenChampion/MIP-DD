@@ -96,11 +96,25 @@ public:
 
       HighsSparseMatrix sparse_row;
       sparse_row.format_ = MatrixFormat::kRowwise;
-      sparse_row.num_col_ = nrowcols;
+      sparse_row.num_col_ = model.lp_.num_col_;
       sparse_row.num_row_ = 1;
-      sparse_row.start_ = {0};
+      sparse_row.start_ = {0, rowinds.size()};
       sparse_row.index_ = rowinds;
       sparse_row.value_ = rowvals;
+
+      std::cout << "sparse_row.num_row_:" << sparse_row.num_row_ << std::endl;
+      std::cout << "sparse_row.num_col_:" << sparse_row.num_col_ << std::endl;
+
+      // std::cout << "sparse_row.index_: ";
+      // for (auto it = sparse_row.index_.begin(); it != sparse_row.index_.end(); ++it) {
+      //   std::cout << *it << " ";
+      // }
+      // std::cout << std::endl;
+      // std::cout << "sparse_row.value_: ";
+      // for (auto it = sparse_row.value_.begin(); it != sparse_row.value_.end(); ++it) {
+      //   std::cout << *it << " ";
+      // }
+      // std::cout << std::endl;
 
       double lhs = rflags[row].test(RowFlag::kLhsInf) ? -kHighsInf : static_cast<double>(lhs_values[row]);
       double rhs = rflags[row].test(RowFlag::kRhsInf) ? kHighsInf : static_cast<double>(rhs_values[row]);
@@ -112,11 +126,23 @@ public:
       row_upper.push_back(rhs);
       row_name.push_back(consNames[row]);
       model.lp_.a_matrix_.addRows(sparse_row);
+      std::cout << "model.lp_.a_matrix_.num_row_:" << model.lp_.a_matrix_.num_row_ << std::endl;
+      std::cout << "model.lp_.a_matrix_.num_col_:" << model.lp_.a_matrix_.num_col_ << std::endl;
     }
+
+    model.lp_.row_lower_ = row_lower;
+    model.lp_.row_upper_ = row_upper;
+    model.lp_.col_cost_ = obj.coefficients;
 
     model.lp_.num_row_ = row_lower.size();
     model.lp_.col_names_ = col_name;
     model.lp_.row_names_ = row_name;
+
+    model.lp_.setMatrixDimensions();
+
+    std::cout << "model.lp_.a_matrix_.num_row_:" << model.lp_.a_matrix_.num_row_ << std::endl;
+    std::cout << "model.lp_.a_matrix_.num_col_:" << model.lp_.a_matrix_.num_col_ << std::endl;
+    std::cout << "model.lp_.a_matrix_.numNz():" << model.lp_.a_matrix_.numNz() << std::endl;
 
     highs.passModel(model); // TODO: handle errors here?
   }
@@ -168,6 +194,17 @@ public:
     }
 
     return {return_code, return_status};
+  }
+  std::tuple<boost::optional<SolverSettings>, boost::optional<Problem<REAL>>, boost::optional<Solution<REAL>>>
+  readInstance(const String& settings_filename, const String& problem_filename, const String& solution_filename) override
+  {
+      highs.readModel(problem_filename);
+      highs.readSolution(solution_filename);
+      auto highs_solution = highs.getSolution();
+      auto solution(highs_solution.col_value);
+      boost::optional<Solution<REAL>> return_solution(solution);
+      highs.clear();
+      return { boost::none, boost::none, return_solution };
   }
 };
 
