@@ -31,6 +31,7 @@ public:
 
     //this->set_parameters();
 
+
     HighsModel model;
 
     model.lp_.model_name_ = this->model->getName();
@@ -62,7 +63,7 @@ public:
         continue;
       }
       double lb = cflags[col].test(ColFlag::kLbInf) ? -kHighsInf : static_cast<double>(domains.lower_bounds[col]);
-      double ub = cflags[col].test(ColFlag::kLbInf) ? kHighsInf : static_cast<double>(domains.upper_bounds[col]);
+      double ub = cflags[col].test(ColFlag::kUbInf) ? kHighsInf : static_cast<double>(domains.upper_bounds[col]);
       assert(!cflags[col].test(ColFlag::kInactive) || lb == ub);
       HighsVarType type;
       if (cflags[col].test(ColFlag::kIntegral)) {
@@ -102,20 +103,6 @@ public:
       sparse_row.index_ = rowinds;
       sparse_row.value_ = rowvals;
 
-      std::cout << "sparse_row.num_row_:" << sparse_row.num_row_ << std::endl;
-      std::cout << "sparse_row.num_col_:" << sparse_row.num_col_ << std::endl;
-
-      // std::cout << "sparse_row.index_: ";
-      // for (auto it = sparse_row.index_.begin(); it != sparse_row.index_.end(); ++it) {
-      //   std::cout << *it << " ";
-      // }
-      // std::cout << std::endl;
-      // std::cout << "sparse_row.value_: ";
-      // for (auto it = sparse_row.value_.begin(); it != sparse_row.value_.end(); ++it) {
-      //   std::cout << *it << " ";
-      // }
-      // std::cout << std::endl;
-
       double lhs = rflags[row].test(RowFlag::kLhsInf) ? -kHighsInf : static_cast<double>(lhs_values[row]);
       double rhs = rflags[row].test(RowFlag::kRhsInf) ? kHighsInf : static_cast<double>(rhs_values[row]);
       for ( int col = 0; col < ncols; ++col) {
@@ -126,8 +113,6 @@ public:
       row_upper.push_back(rhs);
       row_name.push_back(consNames[row]);
       model.lp_.a_matrix_.addRows(sparse_row);
-      std::cout << "model.lp_.a_matrix_.num_row_:" << model.lp_.a_matrix_.num_row_ << std::endl;
-      std::cout << "model.lp_.a_matrix_.num_col_:" << model.lp_.a_matrix_.num_col_ << std::endl;
     }
 
     model.lp_.row_lower_ = row_lower;
@@ -139,12 +124,8 @@ public:
     model.lp_.row_names_ = row_name;
 
     model.lp_.setMatrixDimensions();
-
-    std::cout << "model.lp_.a_matrix_.num_row_:" << model.lp_.a_matrix_.num_row_ << std::endl;
-    std::cout << "model.lp_.a_matrix_.num_col_:" << model.lp_.a_matrix_.num_col_ << std::endl;
-    std::cout << "model.lp_.a_matrix_.numNz():" << model.lp_.a_matrix_.numNz() << std::endl;
-
     highs.passModel(model); // TODO: handle errors here?
+    highs.readOptions("highs_options.set"); // TODO: handle parameters correctly
   }
   std::pair<char, SolverStatus> solve(const Vec<int> &passcodes) override {
     // TODO: incomplete. See ScipRealInterface.hpp for an indication of what's missing.
@@ -152,6 +133,9 @@ public:
     SolverStatus return_status = SolverStatus::kUnknown;
     HighsStatus status;
 
+    // TODO: remove this commented code
+    // highs.writeModel("bugger_model.mps");
+    // exit(1);
     status = highs.run();
     if (status != HighsStatus::kOk) {
       return_code = SolverRetcode::COMPLETIONFAIL;
@@ -198,6 +182,7 @@ public:
   std::tuple<boost::optional<SolverSettings>, boost::optional<Problem<REAL>>, boost::optional<Solution<REAL>>>
   readInstance(const String& settings_filename, const String& problem_filename, const String& solution_filename) override
   {
+      // TODO: handling settings
       highs.readModel(problem_filename);
       highs.readSolution(solution_filename);
       auto highs_solution = highs.getSolution();
