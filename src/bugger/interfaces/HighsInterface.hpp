@@ -48,6 +48,8 @@ public:
     row_lower.reserve(nrows);
     row_upper.reserve(nrows);
     row_name.reserve(nrows);
+    std::vector<int> new_col_indices(ncols);
+    std::vector<bool> is_col_used(ncols);
 
 
     if (solution_exists) {
@@ -60,7 +62,7 @@ public:
 
     for (int col = 0; col < ncols; ++col) {
       if (cflags[col].test(ColFlag::kFixed)) {
-        continue;
+         continue;
       }
       double lb = cflags[col].test(ColFlag::kLbInf) ? -kHighsInf : static_cast<double>(domains.lower_bounds[col]);
       double ub = cflags[col].test(ColFlag::kUbInf) ? kHighsInf : static_cast<double>(domains.upper_bounds[col]);
@@ -77,6 +79,8 @@ public:
       col_upper.push_back(ub);
       integrality.push_back(type);
       col_name.push_back(varNames[col]);
+      new_col_indices[col] = integrality.size() - 1;
+      is_col_used[col] = true;
     }
 
     model.lp_.num_col_ = integrality.size();
@@ -92,8 +96,12 @@ public:
       assert(!rflags[row].test(RowFlag::kLhsInf) || !rflags[row].test(RowFlag::kRhsInf));
       const auto& rowvec = consMatrix.getRowCoefficients(row);
       int nrowcols = rowvec.getLength( );
-      const std::vector<int> rowinds(rowvec.getIndices( ), rowvec.getIndices( ) + nrowcols);
+      std::vector<int> rowinds(rowvec.getIndices( ), rowvec.getIndices( ) + nrowcols);
       const std::vector<REAL> rowvals(rowvec.getValues( ), rowvec.getValues( ) + nrowcols);
+
+      auto map_index = [&new_col_indices](int &old_index) -> void {old_index = new_col_indices[old_index];};
+
+      std::for_each(rowinds.begin(), rowinds.end(), map_index);
 
       HighsSparseMatrix sparse_row;
       sparse_row.format_ = MatrixFormat::kRowwise;
@@ -105,7 +113,7 @@ public:
 
       double lhs = rflags[row].test(RowFlag::kLhsInf) ? -kHighsInf : static_cast<double>(lhs_values[row]);
       double rhs = rflags[row].test(RowFlag::kRhsInf) ? kHighsInf : static_cast<double>(rhs_values[row]);
-      for ( int col = 0; col < ncols; ++col) {
+      for ( int i = 0; i < nrowcols; ++i) {
         assert(!cflags[rowinds[i]].test(ColFlag::kFixed));
         assert(rowvals[i] != 0);
       }
@@ -133,9 +141,6 @@ public:
     SolverStatus return_status = SolverStatus::kUnknown;
     HighsStatus status;
 
-    // TODO: remove this commented code
-    // highs.writeModel("bugger_model.mps");
-    // exit(1);
     status = highs.run();
     if (status != HighsStatus::kOk) {
       return_code = SolverRetcode::COMPLETIONFAIL;
